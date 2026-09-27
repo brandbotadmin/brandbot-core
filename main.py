@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import json
+import os
 import urllib.request
 from fastapi import FastAPI
 from app.api.v1.router import api_router
-from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,17 +12,21 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="BrandBot SDR API", version="2.0.0")
 
 def send_discord_msg_sync(message: str):
-    """Dërgon njoftim direkt në Discord duke përdorur librarinë standarde."""
-    if settings.DISCORD_WEBHOOK_URL:
+    """Dërgon njoftim në Discord duke marrë URL direkt nga Environment Variables."""
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK")
+    if webhook_url:
         try:
             req = urllib.request.Request(
-                settings.DISCORD_WEBHOOK_URL,
+                webhook_url,
                 data=json.dumps({"content": message}).encode('utf-8'),
                 headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
             )
             urllib.request.urlopen(req)
+            logger.info("Discord notification sent successfully.")
         except Exception as e:
             logger.error(f"Discord Webhook Error: {e}")
+    else:
+        logger.warning("DISCORD_WEBHOOK_URL not set in environment variables.")
 
 async def autonomous_trading_loop():
     """Loop automatik që skanon tregun 24/7 sipas specifikimeve të SDR v2.0."""
@@ -56,11 +60,12 @@ async def startup_event():
         await init_db()
         logger.info("Database initialized successfully.")
     except Exception as e:
-        logger.warning(f"Database connection skipped in local mode: {e}")
+        logger.warning(f"Database connection skipped: {e}")
 
-    # Njoftim në Anglisht për Discord me urllib standard
+    # Njoftimi në Anglisht për Discord
     send_discord_msg_sync("🟢 **BrandBot SDR v2.0**: Server is Online on Render! Bot is actively scanning XAUUSD 24/7 for SMC & CRT setups.")
     
+    # Nisja e skanerit autonom në background
     asyncio.create_task(autonomous_trading_loop())
 
 app.include_router(api_router)
