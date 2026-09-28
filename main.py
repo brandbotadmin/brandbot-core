@@ -109,7 +109,7 @@ async def startup_event():
 
 app.include_router(api_router)
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
 
