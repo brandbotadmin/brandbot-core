@@ -102,7 +102,7 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Database connection skipped: {e}")
 
-    send_discord_msg_sync("🟢 **BrandtBot SDR v2.0**: Server Online! Scanner & MetaApiClient Ready.")
+    send_discord_msg_sync("🟢 **BrandtBot SDR v2.0**: Server Online! Scanner Active.")
     
     asyncio.create_task(autonomous_trading_loop())
     asyncio.create_task(keep_alive_loop())
@@ -112,8 +112,3 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
