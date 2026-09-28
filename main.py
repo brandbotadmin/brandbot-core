@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import urllib.request
+import uvicorn
 from fastapi import FastAPI
 from app.api.v1.router import api_router
 
@@ -41,37 +42,39 @@ async def keep_alive_loop():
 async def autonomous_trading_loop():
     logger.info("🤖 BrandtBot SDR: Market Scanner Started...")
     
-    # Importojmë strategjitë me dinamikë mbrojtëse
-    import app.engine.smc_strategy as smc_module
-    import app.engine.crt_strategy as crt_module
-    from app.engine.news_guard import is_news_safe
-    from app.execution.metaapi_client import execute_trade
+    # Importojmë modulat me kontroll sigurie
+    try:
+        import app.engine.smc_strategy as smc_module
+        import app.engine.crt_strategy as crt_module
+        from app.engine.news_guard import is_news_safe
+        from app.execution.metaapi_client import execute_trade
 
-    # Gjejmë funksionet e sakta brenda mekatizmave SMC dhe CRT
-    smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
-    crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
+        smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
+        crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
 
-    while True:
-        try:
-            if is_news_safe(symbol="XAUUSD"):
-                smc_signal = None
-                crt_signal = None
+        while True:
+            try:
+                if is_news_safe(symbol="XAUUSD"):
+                    smc_signal = None
+                    crt_signal = None
 
-                if smc_func:
-                    smc_signal = await smc_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(smc_func) else smc_func(symbol="XAUUSD")
+                    if smc_func:
+                        smc_signal = await smc_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(smc_func) else smc_func(symbol="XAUUSD")
+                    
+                    if crt_func:
+                        crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
+
+                    if smc_signal and isinstance(smc_signal, dict) and smc_signal.get("action"):
+                        await execute_trade(smc_signal)
+                    elif crt_signal and isinstance(crt_signal, dict) and crt_signal.get("action"):
+                        await execute_trade(crt_signal)
+
+            except Exception as e:
+                logger.warning(f"⚠️ Scanner Error inside loop: {e}")
                 
-                if crt_func:
-                    crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
-
-                if smc_signal and isinstance(smc_signal, dict) and smc_signal.get("action"):
-                    await execute_trade(smc_signal)
-                elif crt_signal and isinstance(crt_signal, dict) and crt_signal.get("action"):
-                    await execute_trade(crt_signal)
-
-        except Exception as e:
-            logger.warning(f"⚠️ Scanner Error: {e}")
-            
-        await asyncio.sleep(60)
+            await asyncio.sleep(60)
+    except Exception as e:
+        logger.error(f"❌ Critical Scanner Initialization Error: {e}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -92,3 +95,7 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
