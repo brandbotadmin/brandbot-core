@@ -26,6 +26,7 @@ def send_discord_msg_sync(message: str):
             logger.error(f"Discord Webhook Error: {e}")
 
 async def keep_alive_loop():
+    """Dërgon kërkesë ping çdo 10 minuta që Render të mos hyjë në gjumë."""
     while True:
         try:
             render_url = os.getenv("RENDER_EXTERNAL_URL")
@@ -44,11 +45,12 @@ async def autonomous_trading_loop():
         import app.engine.smc_strategy as smc_module
         import app.engine.crt_strategy as crt_module
         import app.engine.news_guard as news_module
-        from app.execution.metaapi_client import execute_trade
+        import app.execution.metaapi_client as meta_module
 
         smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
         crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
         news_func = getattr(news_module, 'is_news_safe', None) or getattr(news_module, 'check_news', None) or getattr(news_module, 'is_safe_to_trade', None)
+        exec_func = getattr(meta_module, 'execute_trade', None) or getattr(meta_module, 'send_order', None) or getattr(meta_module, 'place_trade', None)
 
         while True:
             try:
@@ -66,10 +68,11 @@ async def autonomous_trading_loop():
                     if crt_func:
                         crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
 
-                    if smc_signal and isinstance(smc_signal, dict) and smc_signal.get("action"):
-                        await execute_trade(smc_signal)
-                    elif crt_signal and isinstance(crt_signal, dict) and crt_signal.get("action"):
-                        await execute_trade(crt_signal)
+                    if exec_func:
+                        if smc_signal and isinstance(smc_signal, dict) and smc_signal.get("action"):
+                            await exec_func(smc_signal) if asyncio.iscoroutinefunction(exec_func) else exec_func(smc_signal)
+                        elif crt_signal and isinstance(crt_signal, dict) and crt_signal.get("action"):
+                            await exec_func(crt_signal) if asyncio.iscoroutinefunction(exec_func) else exec_func(crt_signal)
 
             except Exception as e:
                 logger.warning(f"⚠️ Scanner Error inside loop: {e}")
