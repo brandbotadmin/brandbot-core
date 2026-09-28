@@ -26,7 +26,6 @@ def send_discord_msg_sync(message: str):
             logger.error(f"Discord Webhook Error: {e}")
 
 async def keep_alive_loop():
-    """Dërgon kërkesë ping çdo 10 minuta që Render të mos hyjë në gjumë."""
     while True:
         try:
             render_url = os.getenv("RENDER_EXTERNAL_URL")
@@ -53,7 +52,6 @@ async def autonomous_trading_loop():
 
         while True:
             try:
-                # Kontrollojmë lajmet nëse ekziston funksioni, përndryshe supozojmë se është safe
                 news_safe = True
                 if news_func:
                     news_safe = await news_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(news_func) else news_func(symbol="XAUUSD")
