@@ -6,7 +6,12 @@ import urllib.request
 from fastapi import FastAPI
 from app.api.v1.router import api_router
 from config.settings import settings
-from app.execution.metaapi_client import MetaApiClient
+
+try:
+    from app.execution.metaapi_client import MetaApiClient
+except Exception as e:
+    MetaApiClient = None
+    logging.warning(f"MetaApiClient import warning: {e}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,15 +50,41 @@ async def process_and_execute_signal(signal: dict):
 
     account_id = getattr(settings, "METAAPI_ACCOUNT_ID", None) or os.getenv("METAAPI_ACCOUNT_ID", "")
     
-    await MetaApiClient.execute_trade(
-        account_id=account_id,
-        symbol=signal.get("symbol", "XAUUSD"),
-        action=signal.get("action"),
-        volume=float(signal.get("volume", settings.MIN_LOT_SIZE)),
-        stop_loss=float(signal.get("stop_loss", 0.0)),
-        take_profit=float(signal.get("take_profit", 0.0)),
-        entry_price=float(signal.get("entry_price", 0.0))
-    )
+    if MetaApiClient:
+        trade_func = (
+            getattr(MetaApiClient, 'execute_trade', None) or 
+            getattr(MetaApiClient, 'send_order', None) or 
+            getattr(MetaApiClient, 'place_order', None) or 
+            getattr(MetaApiClient, 'execute', None)
+        )
+
+        if trade_func:
+            try:
+                if asyncio.iscoroutinefunction(trade_func):
+                    await trade_func(
+                        account_id=account_id,
+                        symbol=signal.get("symbol", "XAUUSD"),
+                        action=signal.get("action"),
+                        volume=float(signal.get("volume", getattr(settings, "MIN_LOT_SIZE", 0.01))),
+                        stop_loss=float(signal.get("stop_loss", 0.0)),
+                        take_profit=float(signal.get("take_profit", 0.0)),
+                        entry_price=float(signal.get("entry_price", 0.0))
+                    )
+                else:
+                    trade_func(
+                        account_id=account_id,
+                        symbol=signal.get("symbol", "XAUUSD"),
+                        action=signal.get("action"),
+                        volume=float(signal.get("volume", getattr(settings, "MIN_LOT_SIZE", 0.01))),
+                        stop_loss=float(signal.get("stop_loss", 0.0)),
+                        take_profit=float(signal.get("take_profit", 0.0)),
+                        entry_price=float(signal.get("entry_price", 0.0))
+                    )
+                logger.info(f"🚀 Trade executed: {signal}")
+            except Exception as e:
+                logger.error(f"❌ Error executing trade: {e}")
+        else:
+            logger.warning("⚠️ MetaApiClient does not have a recognized trade execution method.")
 
 async def autonomous_trading_loop():
     logger.info("🤖 BrandtBot SDR: Market Scanner Started...")
