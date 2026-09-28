@@ -3,7 +3,6 @@ import logging
 import json
 import os
 import urllib.request
-import uvicorn
 from fastapi import FastAPI
 from app.api.v1.router import api_router
 
@@ -42,19 +41,24 @@ async def keep_alive_loop():
 async def autonomous_trading_loop():
     logger.info("🤖 BrandtBot SDR: Market Scanner Started...")
     
-    # Importojmë modulat me kontroll sigurie
     try:
         import app.engine.smc_strategy as smc_module
         import app.engine.crt_strategy as crt_module
-        from app.engine.news_guard import is_news_safe
+        import app.engine.news_guard as news_module
         from app.execution.metaapi_client import execute_trade
 
         smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
         crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
+        news_func = getattr(news_module, 'is_news_safe', None) or getattr(news_module, 'check_news', None) or getattr(news_module, 'is_safe_to_trade', None)
 
         while True:
             try:
-                if is_news_safe(symbol="XAUUSD"):
+                # Kontrollojmë lajmet nëse ekziston funksioni, përndryshe supozojmë se është safe
+                news_safe = True
+                if news_func:
+                    news_safe = await news_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(news_func) else news_func(symbol="XAUUSD")
+
+                if news_safe:
                     smc_signal = None
                     crt_signal = None
 
@@ -95,7 +99,3 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
