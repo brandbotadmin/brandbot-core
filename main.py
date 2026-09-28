@@ -46,10 +46,18 @@ async def autonomous_trading_loop():
         import app.engine.news_guard as news_module
         import app.execution.metaapi_client as meta_module
 
+        # Gjen automatikisht funksionet pa shkaktuar ImportError
         smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
         crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
         news_func = getattr(news_module, 'is_news_safe', None) or getattr(news_module, 'check_news', None) or getattr(news_module, 'is_safe_to_trade', None)
-        exec_func = getattr(meta_module, 'execute_trade', None) or getattr(meta_module, 'send_order', None) or getattr(meta_module, 'place_trade', None) or getattr(meta_module, 'execute_order', None)
+        
+        # Kërkon funksionin e ekzekutimit sipas emërtimeve më të zakonshme
+        exec_func = (
+            getattr(meta_module, 'execute_trade', None) or 
+            getattr(meta_module, 'place_order', None) or 
+            getattr(meta_module, 'send_order', None) or 
+            getattr(meta_module, 'execute_order', None)
+        )
 
         while True:
             try:
@@ -74,7 +82,7 @@ async def autonomous_trading_loop():
                             await exec_func(crt_signal) if asyncio.iscoroutinefunction(exec_func) else exec_func(crt_signal)
 
             except Exception as e:
-                logger.warning(f"⚠️ Scanner Error inside loop: {e}")
+                logger.warning(f"⚠️ Scanner Loop Exception: {e}")
                 
             await asyncio.sleep(60)
     except Exception as e:
@@ -99,8 +107,3 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
