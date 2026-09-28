@@ -9,10 +9,9 @@ from app.api.v1.router import api_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="BrandBot SDR API", version="2.0.0")
+app = FastAPI(title="BrandtBot SDR API", version="2.0.0")
 
 def send_discord_msg_sync(message: str):
-    """Dërgon njoftim në Discord duke marrë URL direkt nga Environment Variables."""
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK")
     if webhook_url:
         try:
@@ -25,12 +24,22 @@ def send_discord_msg_sync(message: str):
             logger.info("Discord notification sent successfully.")
         except Exception as e:
             logger.error(f"Discord Webhook Error: {e}")
-    else:
-        logger.warning("DISCORD_WEBHOOK_URL not set in environment variables.")
+
+async def keep_alive_loop():
+    """Dërgon kërkesë (ping) çdo 10 minuta që Render të mos hyjë në gjumë."""
+    while True:
+        try:
+            render_url = os.getenv("RENDER_EXTERNAL_URL")
+            if render_url:
+                req = urllib.request.Request(render_url, headers={'User-Agent': 'Mozilla/5.0'})
+                urllib.request.urlopen(req)
+                logger.info("⚡ Keep-alive ping sent to Render.")
+        except Exception as e:
+            logger.warning(f"Keep-alive ping warning: {e}")
+        await asyncio.sleep(600)  # Çdo 10 minuta (600 sekonda)
 
 async def autonomous_trading_loop():
-    """Loop automatik që skanon tregun 24/7 sipas specifikimeve të SDR v2.0."""
-    logger.info("🤖 BrandBot SDR: Market Scanner Started...")
+    logger.info("🤖 BrandtBot SDR: Market Scanner Started...")
     
     from app.engine.smc_strategy import check_smc_signals
     from app.engine.crt_strategy import check_crt_signals
@@ -62,14 +71,14 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Database connection skipped: {e}")
 
-    # Njoftimi në Anglisht për Discord
-    send_discord_msg_sync("🟢 **BrandBot SDR v2.0**: Server is Online on Render! Bot is actively scanning XAUUSD 24/7 for SMC & CRT setups.")
+    send_discord_msg_sync("🟢 **BrandtBot SDR v2.0**: Server is Online & Keep-Alive Active! Bot is actively scanning XAUUSD 24/7.")
     
-    # Nisja e skanerit autonom në background
+    # Nisim skanerin e tregut dhe keep-alive loop-in në prapavijë
     asyncio.create_task(autonomous_trading_loop())
+    asyncio.create_task(keep_alive_loop())
 
 app.include_router(api_router)
 
 @app.get("/")
 async def root():
-    return {"message": "BrandBot SDR v2.0 API is running", "mode": "fully_autonomous"}
+    return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
