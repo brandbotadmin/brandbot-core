@@ -50,7 +50,7 @@ async def autonomous_trading_loop():
         smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
         crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
         news_func = getattr(news_module, 'is_news_safe', None) or getattr(news_module, 'check_news', None) or getattr(news_module, 'is_safe_to_trade', None)
-        exec_func = getattr(meta_module, 'execute_trade', None) or getattr(meta_module, 'send_order', None) or getattr(meta_module, 'place_trade', None)
+        exec_func = getattr(meta_module, 'execute_trade', None) or getattr(meta_module, 'send_order', None) or getattr(meta_module, 'place_trade', None) or getattr(meta_module, 'execute_order', None)
 
         while True:
             try:
