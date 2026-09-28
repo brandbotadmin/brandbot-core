@@ -5,6 +5,8 @@ import os
 import urllib.request
 from fastapi import FastAPI
 from app.api.v1.router import api_router
+from config.settings import settings
+from app.execution.metaapi_client import MetaApiClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,6 +39,22 @@ async def keep_alive_loop():
             logger.warning(f"Keep-alive ping warning: {e}")
         await asyncio.sleep(600)
 
+async def process_and_execute_signal(signal: dict):
+    if not signal or not isinstance(signal, dict) or not signal.get("action"):
+        return
+
+    account_id = getattr(settings, "METAAPI_ACCOUNT_ID", None) or os.getenv("METAAPI_ACCOUNT_ID", "")
+    
+    await MetaApiClient.execute_trade(
+        account_id=account_id,
+        symbol=signal.get("symbol", "XAUUSD"),
+        action=signal.get("action"),
+        volume=float(signal.get("volume", settings.MIN_LOT_SIZE)),
+        stop_loss=float(signal.get("stop_loss", 0.0)),
+        take_profit=float(signal.get("take_profit", 0.0)),
+        entry_price=float(signal.get("entry_price", 0.0))
+    )
+
 async def autonomous_trading_loop():
     logger.info("🤖 BrandtBot SDR: Market Scanner Started...")
     
@@ -44,20 +62,10 @@ async def autonomous_trading_loop():
         import app.engine.smc_strategy as smc_module
         import app.engine.crt_strategy as crt_module
         import app.engine.news_guard as news_module
-        import app.execution.metaapi_client as meta_module
 
-        # Gjen automatikisht funksionet pa shkaktuar ImportError
         smc_func = getattr(smc_module, 'check_smc_signals', None) or getattr(smc_module, 'analyze_smc', None)
         crt_func = getattr(crt_module, 'check_crt_signals', None) or getattr(crt_module, 'analyze_crt', None)
         news_func = getattr(news_module, 'is_news_safe', None) or getattr(news_module, 'check_news', None) or getattr(news_module, 'is_safe_to_trade', None)
-        
-        # Kërkon funksionin e ekzekutimit sipas emërtimeve më të zakonshme
-        exec_func = (
-            getattr(meta_module, 'execute_trade', None) or 
-            getattr(meta_module, 'place_order', None) or 
-            getattr(meta_module, 'send_order', None) or 
-            getattr(meta_module, 'execute_order', None)
-        )
 
         while True:
             try:
@@ -66,27 +74,22 @@ async def autonomous_trading_loop():
                     news_safe = await news_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(news_func) else news_func(symbol="XAUUSD")
 
                 if news_safe:
-                    smc_signal = None
-                    crt_signal = None
-
                     if smc_func:
                         smc_signal = await smc_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(smc_func) else smc_func(symbol="XAUUSD")
-                    
+                        if smc_signal:
+                            await process_and_execute_signal(smc_signal)
+
                     if crt_func:
                         crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
-
-                    if exec_func:
-                        if smc_signal and isinstance(smc_signal, dict) and smc_signal.get("action"):
-                            await exec_func(smc_signal) if asyncio.iscoroutinefunction(exec_func) else exec_func(smc_signal)
-                        elif crt_signal and isinstance(crt_signal, dict) and crt_signal.get("action"):
-                            await exec_func(crt_signal) if asyncio.iscoroutinefunction(exec_func) else exec_func(crt_signal)
+                        if crt_signal:
+                            await process_and_execute_signal(crt_signal)
 
             except Exception as e:
-                logger.warning(f"⚠️ Scanner Loop Exception: {e}")
+                logger.warning(f"⚠️ Scanner Loop Warning: {e}")
                 
             await asyncio.sleep(60)
     except Exception as e:
-        logger.error(f"❌ Critical Scanner Initialization Error: {e}")
+        logger.error(f"❌ Critical Scanner Error: {e}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -97,7 +100,7 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Database connection skipped: {e}")
 
-    send_discord_msg_sync("🟢 **BrandtBot SDR v2.0**: Server is Online & Keep-Alive Active! Bot is actively scanning XAUUSD 24/7.")
+    send_discord_msg_sync("🟢 **BrandtBot SDR v2.0**: Server Online! Scanner & MetaApiClient Ready.")
     
     asyncio.create_task(autonomous_trading_loop())
     asyncio.create_task(keep_alive_loop())
