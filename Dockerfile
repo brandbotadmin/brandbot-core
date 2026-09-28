@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalo paketave të nevojshme të sistemit
+# Instalo paketat e sistemit
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
@@ -18,5 +18,5 @@ COPY . .
 # Eksporto portën
 EXPOSE 10000
 
-# Ekzekuto aplikacionin drejtpërdrejt nëpërmjet Python
-CMD ["python", "main.py"]
+# Ekzekuto uvicorn duke i lidhur automatikisht variablën PORT të Render
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
