@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Kopjo të gjithë kodin e projektit
 COPY . .
 
-# Ekspporto portën 10000
+# Eksporto portën
 EXPOSE 10000
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+
+# Ekzekuto aplikacionin drejtpërdrejt nëpërmjet Python
+CMD ["python", "main.py"]

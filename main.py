@@ -112,3 +112,8 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     return {"message": "BrandtBot SDR v2.0 API is running", "mode": "fully_autonomous"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
