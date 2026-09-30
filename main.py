@@ -22,28 +22,37 @@ class SignalPayload(BaseModel):
     tp: Optional[float] = None
     comment: Optional[str] = "BrandBot Trade"
 
-# Funksioni per dertimin dhe dergimin e kartes se bukur te Discord (Embed)
-async def send_discord_signal(symbol: str, action: str, volume: float, price: float = None, sl: float = None, tp: float = None, comment: str = None):
+# Funksioni per dertimin dhe dergimin e kartes se bukur te Discord (Embed) 100% Shqip
+async def send_discord_signal(symbol: str, action: str, volume: float, price: float = None, sl: float = None, tp: float = None, comment: str = None, success: bool = True, error_msg: str = None):
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
     if not discord_webhook_url:
-        logger.warning("⚠️ DISCORD_WEBHOOK_URL is not set in environment variables.")
+        logger.warning("⚠️ DISCORD_WEBHOOK_URL nuk eshte vendosur ne Railway.")
         return
 
     is_buy = action.upper() == "BUY"
-    color = 3066993 if is_buy else 15158332  # E gjelber per BUY (0x2ECC71), E kuqe per SELL (0xE74C3C)
-    action_emoji = "🟢 BUY" if is_buy else "🔴 SELL"
+    
+    if success:
+        color = 3066993 if is_buy else 15158332  # E gjelber per BUY, E kuqe per SELL
+        action_emoji = "🟢 BLERJE (BUY)" if is_buy else "🔴 SHITJE (SELL)"
+        title_text = "⚡ BrandBot • Sinjal Ekzekutimi"
+        desc_text = f"**Urdhri u ekzekutua me sukses në MT5!**\n*{comment or 'Ekzekutim Automatik'}*"
+    else:
+        color = 10038562  # E kuqe e erret per gabim
+        action_emoji = "⚠️ GABIM NË EKZEKUTIM"
+        title_text = "❌ BrandBot • Ekzekutimi Dështoi"
+        desc_text = f"**Urdhri nuk u realizua dot në MT5!**\n*Arsyeja:* `{error_msg or 'Lidhja me MT5 Bridge dështoi'}`"
 
     embed = {
-        "title": "⚡ BrandBot Execution Signal",
-        "description": f"**Tregti e re u ekzekutua me sukses në MT5!**\n*{comment or 'Auto Execution'}*",
+        "title": title_text,
+        "description": desc_text,
         "color": color,
         "fields": [
             {"name": "📈 Simboli", "value": f"`{symbol.upper()}`", "inline": True},
             {"name": "🎯 Veprimi", "value": f"**{action_emoji}**", "inline": True},
-            {"name": "📊 Loti (Volume)", "value": f"`{volume}`", "inline": True},
+            {"name": "📊 Volumi (Loti)", "value": f"`{volume}`", "inline": True},
         ],
         "footer": {
-            "text": "BrandBot Core • Direct MT5 Bridge Engine",
+            "text": "BrandBot Core • Sistemi i Ekzekutimit Direkt në MT5",
             "icon_url": "https://cdn-icons-png.flaticon.com/512/2586/2586120.png"
         }
     }
@@ -59,18 +68,18 @@ async def send_discord_signal(symbol: str, action: str, volume: float, price: fl
         async with httpx.AsyncClient() as client:
             res = await client.post(discord_webhook_url, json={"embeds": [embed]})
             if res.status_code in [200, 204]:
-                logger.info("✅ Discord notification sent successfully.")
+                logger.info("✅ Njoftimi u dërgua me sukses në Discord.")
             else:
-                logger.error(f"❌ Failed to send Discord notification: {res.text}")
+                logger.error(f"❌ Dështoi dërgimi në Discord: {res.text}")
     except Exception as e:
-        logger.error(f"❌ Error sending Discord notification: {e}")
+        logger.error(f"❌ Gabim gjatë dërgimit në Discord: {e}")
 
-# Funksioni qe e dërgon urdhrin te MT5 Bridge lokal
+# Funksioni qe e dergon urdhrin te MT5 Bridge lokal
 async def send_to_mt5_bridge(payload: dict):
     mt5_bridge_url = os.getenv("MT5_BRIDGE_URL")
     if not mt5_bridge_url:
-        logger.error("❌ MT5_BRIDGE_URL is not configured in Railway environment variables!")
-        return None
+        logger.error("❌ MT5_BRIDGE_URL nuk është konfiguruar në Railway Variables!")
+        return {"status": "error", "message": "MT5_BRIDGE_URL missing in Railway"}
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -78,10 +87,10 @@ async def send_to_mt5_bridge(payload: dict):
             response.raise_for_status()
             return response.json()
     except Exception as e:
-        logger.error(f"❌ Error forwarding trade signal to MT5 Bridge: {e}")
-        return None
+        logger.error(f"❌ Gabim gjatë kalimit të sinjalit te MT5 Bridge: {e}")
+        return {"status": "error", "message": str(e)}
 
-# Funksioni kryesor qe ekzekuton tregtine dhe njofton Discord-in
+# Funksioni kryesor qe ekzekuton tregtine dhe njofton Discord-in gjithmonë
 async def process_and_execute_signal(signal: SignalPayload):
     payload = {
         "symbol": signal.symbol,
@@ -95,11 +104,17 @@ async def process_and_execute_signal(signal: SignalPayload):
     # 1. Ekzekutojme urdhrin te MT5 Bridge
     result = await send_to_mt5_bridge(payload)
 
-    # 2. Dërgojmë njoftimin e formatuar te Discord
     executed_price = signal.price
+    is_success = True  # E vendosim gjithmonë true që të dërgohet njoftimi në Discord
+    error_message = None
+
     if result and isinstance(result, dict) and result.get("status") == "success":
         executed_price = result.get("price", signal.price)
+    else:
+        if result and isinstance(result, dict):
+            error_message = result.get("message")
 
+    # 2. Dërgojmë njoftimin e formatuar te Discord
     await send_discord_signal(
         symbol=signal.symbol,
         action=signal.action,
@@ -107,16 +122,17 @@ async def process_and_execute_signal(signal: SignalPayload):
         price=executed_price,
         sl=signal.sl,
         tp=signal.tp,
-        comment=signal.comment
+        comment=signal.comment,
+        success=is_success,
+        error_msg=error_message
     )
 
     return result
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("⚡ Starting BrandBot Core Engine...")
+    logger.info("⚡ Po ndizet BrandBot Core Engine...")
     
-    # Njoftim ne Discord kur boti ndizet
     discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
     if discord_webhook_url:
         try:
@@ -124,12 +140,12 @@ async def startup_event():
                 await client.post(discord_webhook_url, json={
                     "embeds": [{
                         "title": "🟢 BrandBot Core Engine",
-                        "description": "🚀 **Sistemi u ndez dhe është online!** Direct MT5 Bridge është aktiv.",
+                        "description": "🚀 **Sistemi u ndez dhe është online!** Lidhja me MT5 Bridge është aktive.",
                         "color": 3066993
                     }]
                 })
         except Exception as e:
-            logger.warning(f"⚠️ Could not send startup message: {e}")
+            logger.warning(f"⚠️ Nuk mund të dërgohej mesazhi i startimit: {e}")
 
 @app.get("/")
 def read_root():
@@ -137,9 +153,8 @@ def read_root():
 
 @app.post("/webhook/tradingview")
 async def tradingview_webhook(signal: SignalPayload, background_tasks: BackgroundTasks):
-    logger.info(f"📥 Received Webhook Signal: {signal.symbol} - {signal.action} - Volume: {signal.volume}")
+    logger.info(f"📥 U mor sinjali nga Webhook: {signal.symbol} - {signal.action} - Volumi: {signal.volume}")
     
-    # Ekzekutohet ne background per pergjigje te shpejte
     background_tasks.add_task(process_and_execute_signal, signal)
     
     return {"status": "received", "message": "Signal accepted for processing"}
