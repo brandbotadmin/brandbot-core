@@ -4,44 +4,57 @@ import os
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
+import httpx
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # 1. LOGGING CONFIGURATION
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("brandbot")
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # 2. FASTAPI APP INITIALIZATION
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 app = FastAPI(
     title="BrandBot Core Engine",
     description="Automated Institutional Trading Bot for XAUUSD & Forex",
     version="1.0.0"
 )
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # 3. HELPER & EXECUTION FUNCTIONS
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 async def process_and_execute_signal(signal_data: dict):
     """
-    Përpunon sinjalin e gjeneruar (SMC/CRT), aplikon risk management, 
-    ekzekuton urdhrin te MetaApi dhe dërgon njoftim në Discord Webhook.
+    Përpunon sinjalin e gjeneruar (SMC/CRT), aplikon risk management,
+    ekzekuton urdhrin te MT5 Direct Bridge dhe dërgon njoftim në Discord Webhook.
     """
     try:
         logger.info(f"🚀 Processing Signal for Execution: {signal_data}")
-        
-        # Lexojmë Discord Webhook URL nga Environment Variables
+
+        # Lexojmë URL-në e MT5 Bridge dhe Discord Webhook nga Environment Variables
+        mt5_bridge_url = os.getenv("MT5_BRIDGE_URL", "http://127.0.0.1:8000/trade")
         discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
-        
-        # Këtu ekzekutohet dërgimi i sinjalit te MetaApi & Discord
-        # (Vendoset logjika e multi-tenant anti-fingerprinting dhe execution bridge)
-        
+
+        # 1. Ekzekutimi i urdhrit te MT5 Bridge (Kompjuteri lokal ose VPS)
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(mt5_bridge_url, json=signal_data, timeout=10.0)
+                logger.info(f"✅ MT5 Bridge Response: {res.status_code} - {res.text}")
+        except Exception as bridge_err:
+            logger.error(f"❌ Failed to reach MT5 Bridge: {bridge_err}")
+
+        # 2. Dërgimi i njoftimit në Discord
         if discord_webhook_url:
             logger.info("📡 Sending trade notification to Discord...")
+            async with httpx.AsyncClient() as client:
+                discord_payload = {
+                    "content": f"🚨 **BRANDBOT TRADE EXECUTED** 🚨\n```json\n{signal_data}\n```"
+                }
+                await client.post(discord_webhook_url, json=discord_payload)
         else:
             logger.warning("⚠️ DISCORD_WEBHOOK_URL is not configured in Environment Variables.")
 
@@ -51,7 +64,7 @@ async def process_and_execute_signal(signal_data: dict):
 
 async def autonomous_trading_loop():
     """
-    Loop-i kryesor asinkron që ekzekutohet çdo minutë për të skanuar tregun, 
+    Loop-i kryesor asinkron që ekzekutohet çdo minutë për të skanuar tregun,
     kontrolluar lajmet dhe ekzekutuar sinjalet.
     """
     try:
@@ -88,21 +101,20 @@ async def autonomous_trading_loop():
                     logger.warning("⚠️ News Guard active - Skipping market check for XAUUSD")
 
             except Exception as e:
-                logger.warning(f"⚠️️ Scanner Loop Warning: {e}")
+                logger.warning(f"⚠️ Scanner Loop Warning: {e}")
 
             await asyncio.sleep(60)
 
     except Exception as e:
-        logger.error(f"❌ Critical Scanner Error: {e}", exc_info=True)
+        logger.error(f"❌ Critical error in autonomous trading loop: {e}", exc_info=True)
 
-
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # 4. STARTUP & SHUTDOWN EVENTS
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup_event():
     logger.info("⚡ Starting BrandBot Core Engine...")
-    
+
     # Inicimi i Bazës së Të Dhënave (PostgreSQL / Redis)
     try:
         from app.core.database import init_db
@@ -113,12 +125,11 @@ async def startup_event():
 
     # Nisja e Background Task për skanimin e vazhdueshëm të tregut
     asyncio.create_task(autonomous_trading_loop())
-    logger.info("🔄 Autonomous Trading Loop started successfully.")
+    logger.info("🌀 Autonomous Trading Loop started successfully.")
 
-
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # 5. API ENDPOINTS
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 @app.get("/")
 async def root():
     return {
@@ -138,7 +149,7 @@ async def tradingview_webhook(request: Request, background_tasks: BackgroundTask
     """
     try:
         data = await request.json()
-        logger.info(f"📩 Received TradingView Webhook: {data}")
+        logger.info(f"📥 Received TradingView Webhook: {data}")
         background_tasks.add_task(process_and_execute_signal, data)
         return {"status": "signal_received"}
     except Exception as e:
