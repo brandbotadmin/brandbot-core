@@ -6,7 +6,7 @@ import httpx
 from fastapi import FastAPI
 from app.models.schemas import OrderExecutionRequest
 from app.engine.smc_strategy import SMCStrategyEngine
-from app.engine.risk import RiskManager
+from app.risk import RiskManager
 from app.core.redis import redis_manager
 
 logging.basicConfig(level=logging.INFO)
