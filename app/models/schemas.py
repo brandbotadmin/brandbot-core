@@ -95,3 +95,15 @@ def default_take_profit(direction: str, entry: float, fvg_low: float, fvg_high: 
     if direction == "BUY":
         return round(entry + offset, 2)
     return round(entry - offset, 2)
+
+
+class OrderExecutionRequest(BaseModel):
+    account_id: str
+    symbol: str
+    action: Literal["BUY", "SELL"]
+    lot_size: float
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    order_type: Literal["MARKET", "LIMIT"]
+    delay_ms: int
