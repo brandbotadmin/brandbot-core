@@ -13,7 +13,7 @@ logger = logging.getLogger("BrandBot-Autonomous-Core")
 
 app = FastAPI(title="BrandBot Autonomous Institutional Engine SDR v2.0")
 
-# Lidhja e pavarur me Redis
+# Lidhja me Redis
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -28,6 +28,7 @@ class OrderExecutionRequest(BaseModel):
     order_type: Literal["MARKET", "LIMIT"]
     delay_ms: int
 
+# Menaxhimi i Riskut dhe Llogaritja Dinamike e Lotit
 class RiskManager:
     @staticmethod
     def calculate_dynamic_lot(balance: float, risk_percent: float, stop_loss_pips: float) -> float:
@@ -39,6 +40,7 @@ class RiskManager:
         max_allowed_lot = 0.50 if balance < 5000 else 2.00
         return max(0.01, round(min(lot_size, max_allowed_lot), 2))
 
+# Dërgimi i sinjaleve dhe ekzekutimeve në Discord
 async def send_discord_embed(symbol: str, action: str, volume: float, price: float, sl: float, tp: float, success: bool = True, error_msg: str = None):
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
     if not webhook_url:
@@ -46,21 +48,21 @@ async def send_discord_embed(symbol: str, action: str, volume: float, price: flo
 
     is_buy = "BUY" in action.upper()
     color = 3066993 if is_buy else 15158332
-    action_label = "🟢 BUY (Autonomous SMC)" if is_buy else "🔴 SELL (Autonomous SMC)"
+    action_label = "🟢 BUY (Smart Money Concept)" if is_buy else "🔴 SELL (Smart Money Concept)"
 
     embed = {
-        "title": "⚡ BrandBot • Autonomous Execution" if success else "❌ BrandBot • Execution Rejected",
-        "description": "**Bot successfully analyzed chart, detected SMC setup, and executed order via MetaApi!**" if success else f"**Order dropped by safety guard.**\n*Reason:* `{error_msg}`",
+        "title": "⚡ BrandBot • SMC Autonomous Execution" if success else "❌ BrandBot • Execution Dropped",
+        "description": "**Market Guardian analyzed live chart, detected Asia Sweep & FVG alignment, and executed order.**" if success else f"**Order rejected by safety guard.**\n*Reason:* `{error_msg}`",
         "color": color,
         "fields": [
             {"name": "📈 Symbol", "value": f"`{symbol.upper()}`", "inline": True},
-            {"name": "🎯 Strategy Action", "value": f"**{action_label}**", "inline": True},
-            {"name": "📊 Dynamic Lot Size", "value": f"`{volume}`", "inline": True},
-            {"name": "💵 Entry / CE Price", "value": f"`{price}`", "inline": True},
+            {"name": "🎯 SMC Setup", "value": f"**{action_label}**", "inline": True},
+            {"name": "📊 Lot Size", "value": f"`{volume}`", "inline": True},
+            {"name": "💵 Entry (CE)", "value": f"`{price}`", "inline": True},
             {"name": "🛑 Stop Loss", "value": f"`{sl}`", "inline": True},
             {"name": "🎯 Take Profit", "value": f"`{tp}`", "inline": True},
         ],
-        "footer": {"text": "BrandBot Autonomous SaaS • Tick-by-Tick Market Guardian"}
+        "footer": {"text": "BrandBot Institutional Engine • 24/7 Market Guardian"}
     }
 
     try:
@@ -69,34 +71,51 @@ async def send_discord_embed(symbol: str, action: str, volume: float, price: flo
     except Exception as e:
         logger.error(f"Discord webhook error: {e}")
 
+# Cikli Autonom i Skanimit të Tregut (SMC Logic: Asia Sweep, FVG & CE Entry)
 async def autonomous_market_monitor():
-    logger.info("👀 Autonomous Market Guardian is active. Scanning XAUUSD charts in real-time...")
+    logger.info("👀 BrandBot Autonomous Market Guardian is active. Scanning XAUUSD charts in real-time...")
     
     while True:
         try:
             symbol = "XAUUSD"
             lock_key = f"lock:symbol:{symbol}"
             
+            # Kontrollojmë nëse ka pozicion aktiv (Distributed Locking për shmangien e garave)
             is_locked = await redis_client.exists(lock_key)
             if is_locked:
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
                 continue
 
-            market_signal_detected = False  
-            
-            if market_signal_detected:
-                acquired = await redis_client.set(lock_key, "locked", nx=True, ex=30)
+            # Këtu integrohet logjika e leximit të çmimeve dhe detektimit të SMC (Asia Range / Sweep / FVG)
+            # Për momentin simulojmë kushtin e skanimit të tregut
+            smc_signal_triggered = False  # Ky kusht ndryshon kur plotësohen kriteret e çmimit live
+
+            if smc_signal_triggered:
+                acquired = await redis_client.set(lock_key, "locked", nx=True, ex=60)
                 if acquired:
                     try:
-                        logger.info(f"🎯 Autonomous SMC Setup detected on {symbol}!")
-                        ce_entry, sl_price, tp_price = 2650.00, 2642.00, 2680.00
+                        logger.info(f"🎯 SMC Setup (Asia Sweep + FVG) detected on {symbol}!")
+                        
+                        # Parametrat e llogaritur të tregtisë
+                        ce_entry = 2650.00
+                        sl_price = 2642.00
+                        tp_price = 2680.00
+                        
                         lot_size = RiskManager.calculate_dynamic_lot(balance=10000.0, risk_percent=0.5, stop_loss_pips=80.0)
 
-                        execution_delay = random.gauss(mu=0.5, sigma=0.2)
-                        await asyncio.sleep(max(0.1, abs(execution_delay)))
+                        # Anti-Fingerprinting: Gaussian Jitter për vonesë të natyrshme ekzekutimi
+                        execution_delay = random.gauss(mu=0.6, sigma=0.2)
+                        await asyncio.sleep(max(0.2, abs(execution_delay)))
 
                         mt5_url = os.getenv("MT5_BRIDGE_URL")
-                        bridge_payload = {"symbol": symbol, "action": "BUY", "volume": lot_size, "entry": ce_entry, "sl": sl_price, "tp": tp_price}
+                        bridge_payload = {
+                            "symbol": symbol,
+                            "action": "BUY",
+                            "volume": lot_size,
+                            "entry": ce_entry,
+                            "sl": sl_price,
+                            "tp": tp_price
+                        }
 
                         success, error_msg = True, None
                         if mt5_url:
@@ -116,13 +135,13 @@ async def autonomous_market_monitor():
         except Exception as scan_err:
             logger.error(f"Error in autonomous market scanner loop: {scan_err}")
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("⚡ Starting BrandBot Autonomous Core Engine & Initializing Background Guardian...")
+    logger.info("⚡ BrandBot Core Engine Starting & Initializing Guardian Loop...")
     asyncio.create_task(autonomous_market_monitor())
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "system": "BrandBot Autonomous Institutional Core SDR v2.0"}
+    return {"status": "online", "system": "BrandBot Autonomous Institutional Engine SDR v2.0"}
