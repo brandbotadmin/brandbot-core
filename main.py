@@ -3,7 +3,8 @@ import logging
 import asyncio
 import httpx
 from fastapi import FastAPI
-from pydantic import BaseModel, Literal
+from pydantic import BaseModel
+from typing import Literal
 import redis.asyncio as redis
 
 logging.basicConfig(level=logging.INFO)
@@ -61,7 +62,6 @@ async def send_discord_embed(symbol: str, action: str, volume: float, price: flo
 # Marrja e çmimit live të XAUUSD nga një burim i jashtëm publik
 async def fetch_live_xauusd_price() -> float:
     try:
-        # Përdorimi i një API publike për tërheqjen e çmimit të arit
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get("https://api.coinbase.com/v2/prices/PAXG-USD/spot")
             if response.status_code == 200:
@@ -69,7 +69,7 @@ async def fetch_live_xauusd_price() -> float:
                 return float(data["data"]["amount"])
     except Exception as e:
         logger.error(f"Error fetching live price: {e}")
-    return 2650.00 # Çmim rezervë në rast se dështon lidhja e përkohshme
+    return 2650.00
 
 # Cikli Autonom që punon 24/7 në sfond
 async def autonomous_market_monitor():
@@ -80,37 +80,28 @@ async def autonomous_market_monitor():
             symbol = "XAUUSD"
             lock_key = f"lock:symbol:{symbol}"
             
-            # Kontrollojmë nëse ka ndonjë bllokim aktiv në Redis
             is_locked = await redis_client.exists(lock_key)
             if is_locked:
                 await asyncio.sleep(30)
                 continue
 
-            # Marrja e çmimit aktual të tregut
             current_price = await fetch_live_xauusd_price()
             logger.info(f"📊 Live XAUUSD Market Price scanned: {current_price}")
 
-            # Këtu mund të vendosësh kushtin tënd të saktë të SMC. 
-            # Për momentin e lëmë si strukturë demonstrative/testuese që kap lëvizjet.
-            # Kur dëshiron që boti të hapë pozicionin, ndryshojmë këtë kusht sipas dëshirës.
-            simulated_smc_trigger = False  # Ndryshoje në True kur të duash testim live
+            simulated_smc_trigger = False  
 
             if simulated_smc_trigger:
-                # Vendosim lock në Redis për të mos lejuar hapjen e dyfishtë të pozicionit (zgjat 10 minuta)
                 acquired = await redis_client.set(lock_key, "locked", nx=True, ex=600)
                 if acquired:
                     try:
                         logger.info(f"🎯 Institutional SMC setup confirmed on {symbol} at price {current_price}!")
                         
-                        # Llogaritja e parametrave të tregtisë
                         entry = current_price
-                        sl = round(entry - 8.00, 2) # Stop Loss me 8 dollarë largësi
-                        tp = round(entry + 20.00, 2) # Take Profit me 20 dollarë fitim
+                        sl = round(entry - 8.00, 2)
+                        tp = round(entry + 20.00, 2)
                         
-                        # Llogaritja e lotit dinamik (Llogaria: $10,000, Risk: 0.5%)
                         lot_size = RiskManager.calculate_dynamic_lot(balance=10000.0, risk_percent=0.5, stop_loss_pips=80.0)
 
-                        # Dërgimi i njoftimit në Discord
                         await send_discord_embed(symbol, "BUY", lot_size, entry, sl, tp)
 
                     except Exception as inner_err:
@@ -120,7 +111,6 @@ async def autonomous_market_monitor():
         except Exception as scan_err:
             logger.error(f"Error in autonomous background loop: {scan_err}")
 
-        # Boti kontrollon tregun çdo 60 sekonda
         await asyncio.sleep(60)
 
 @app.on_event("startup")
