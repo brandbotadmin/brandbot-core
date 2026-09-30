@@ -102,21 +102,25 @@ async def autonomous_trading_loop():
             try:
                 logger.info("🔎 Checking XAUUSD market signals...")
 
-                news_safe = True
-                if news_func:
-                    news_safe = await news_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(news_func) else news_func(symbol="XAUUSD")
+               news_safe = True
+        if news_func:
+            news_safe = await news_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(news_func) else news_func(symbol="XAUUSD")
+            logger.info(f"📊 News Check: Safe={news_safe}")
 
-                if news_safe:
-                    if smc_func:
-                        smc_signal = await smc_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(smc_func) else smc_func(symbol="XAUUSD")
-                        if smc_signal:
-                            await process_and_execute_signal(smc_signal)
+        if news_safe:
+            if smc_func:
+                smc_signal = await smc_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(smc_func) else smc_func(symbol="XAUUSD")
+                logger.info(f"🔍 SMC Signal Result: {smc_signal}")
+                if smc_signal:
+                    await process_and_execute_signal(smc_signal)
 
-                    if crt_func:
-                        crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
-                        if crt_signal:
-                            await process_and_execute_signal(crt_signal)
-
+            if crt_func:
+                crt_signal = await crt_func(symbol="XAUUSD") if asyncio.iscoroutinefunction(crt_func) else crt_func(symbol="XAUUSD")
+                logger.info(f"🔍 CRT Signal Result: {crt_signal}")
+                if crt_signal:
+                    await process_and_execute_signal(crt_signal)
+        else:
+            logger.warning("⚠️ News Guard active - Skipping market check for XAUUSD")
             except Exception as e:
                 logger.warning(f"⚠️ Scanner Loop Warning: {e}")
                 
