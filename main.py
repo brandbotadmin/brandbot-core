@@ -71,7 +71,7 @@ async def send_discord_embed(symbol: str, action: str, volume: float, price: flo
     except Exception as e:
         logger.error(f"Discord webhook error: {e}")
 
-# Cikli Autonom i Skanimit të Tregut (SMC Logic: Asia Sweep, FVG & CE Entry)
+# Cikli Autonom i Skanimit të Tregut
 async def autonomous_market_monitor():
     logger.info("👀 BrandBot Autonomous Market Guardian is active. Scanning XAUUSD charts in real-time...")
     
@@ -80,42 +80,26 @@ async def autonomous_market_monitor():
             symbol = "XAUUSD"
             lock_key = f"lock:symbol:{symbol}"
             
-            # Kontrollojmë nëse ka pozicion aktiv (Distributed Locking për shmangien e garave)
             is_locked = await redis_client.exists(lock_key)
             if is_locked:
                 await asyncio.sleep(10)
                 continue
 
-            # Këtu integrohet logjika e leximit të çmimeve dhe detektimit të SMC (Asia Range / Sweep / FVG)
-            # Për momentin simulojmë kushtin e skanimit të tregut
-            smc_signal_triggered = False  # Ky kusht ndryshon kur plotësohen kriteret e çmimit live
+            smc_signal_triggered = False  
 
             if smc_signal_triggered:
                 acquired = await redis_client.set(lock_key, "locked", nx=True, ex=60)
                 if acquired:
                     try:
                         logger.info(f"🎯 SMC Setup (Asia Sweep + FVG) detected on {symbol}!")
-                        
-                        # Parametrat e llogaritur të tregtisë
-                        ce_entry = 2650.00
-                        sl_price = 2642.00
-                        tp_price = 2680.00
-                        
+                        ce_entry, sl_price, tp_price = 2650.00, 2642.00, 2680.00
                         lot_size = RiskManager.calculate_dynamic_lot(balance=10000.0, risk_percent=0.5, stop_loss_pips=80.0)
 
-                        # Anti-Fingerprinting: Gaussian Jitter për vonesë të natyrshme ekzekutimi
                         execution_delay = random.gauss(mu=0.6, sigma=0.2)
                         await asyncio.sleep(max(0.2, abs(execution_delay)))
 
                         mt5_url = os.getenv("MT5_BRIDGE_URL")
-                        bridge_payload = {
-                            "symbol": symbol,
-                            "action": "BUY",
-                            "volume": lot_size,
-                            "entry": ce_entry,
-                            "sl": sl_price,
-                            "tp": tp_price
-                        }
+                        bridge_payload = {"symbol": symbol, "action": "BUY", "volume": lot_size, "entry": ce_entry, "sl": sl_price, "tp": tp_price}
 
                         success, error_msg = True, None
                         if mt5_url:
@@ -145,3 +129,8 @@ async def startup_event():
 @app.get("/")
 def read_root():
     return {"status": "online", "system": "BrandBot Autonomous Institutional Engine SDR v2.0"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
